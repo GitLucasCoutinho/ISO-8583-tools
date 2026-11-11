@@ -1,0 +1,438 @@
+<header class="topbar">
+  <a class="brand" href="#" aria-label="ISO tools início">
+    <span class="brand-mark">8583</span>
+    <span>iso<span class="brand-muted">tools</span></span>
+  </a>
+  <div class="topbar-right">
+    <span class="local-indicator"><i></i> Processamento local</span>
+    <a class="github-link" href="https://en.wikipedia.org/wiki/ISO_8583" target="_blank" rel="noreferrer">Sobre ISO 8583 <span aria-hidden="true">↗</span></a>
+  </div>
+</header>
+
+<main class="page-shell">
+  <section class="hero">
+    <div class="eyebrow"><span class="eyebrow-line"></span> FERRAMENTAS PARA PAGAMENTOS</div>
+    <h1>Entenda cada byte.<br><span>Desvende o ISO 8583.</span></h1>
+    <p>Decodifique mensagens, explore bitmaps e descubra o que acontece por trás de cada transação.</p>
+  </section>
+
+  <section class="lesson-card card">
+    <details class="lesson-panel">
+      <summary class="lesson-panel-head">
+        <span class="lesson-panel-title">
+          <span class="section-kicker">00 / COMO A MENSAGEM É MONTADA</span>
+        </span>
+        <span class="lesson-panel-toggle" aria-hidden="true"></span>
+      </summary>
+
+      <div class="lesson-panel-body">
+        <p class="lesson-lead">
+          Uma mensagem ISO 8583 não tem marcador de campo. Ela é uma fila, e cada pedaço depende
+          do anterior: o MTI diz que tipo de mensagem é, o bitmap diz quais campos existem, e só
+          então os campos aparecem, em ordem crescente de número. Se um byte sai do lugar, tudo
+          depois dele é lido errado.
+        </p>
+
+        <div class="lesson-parts">
+          <article class="lesson-part">
+            <span class="lesson-part-tag tag-1">PARTE 1</span>
+            <h3>MTI</h3>
+            <p>
+              Quatro dígitos que dizem o que a mensagem é: a versão do protocolo, a classe, se é
+              pedido ou resposta, e quem começou a conversa. É sempre o primeiro campo, e é por
+              ele que o leitor sabe o que esperar do resto.
+            </p>
+          </article>
+
+          <article class="lesson-part">
+            <span class="lesson-part-tag tag-2">PARTE 2</span>
+            <h3>Bitmap</h3>
+            <p>
+              Oito bytes, 64 bits, e cada bit responde sim ou não para um campo: bit 2 ligado
+              significa que o DE 2 existe. Se o bit 1 estiver ligado, vem um segundo bitmap, com
+              os campos 65 a 128.
+            </p>
+          </article>
+
+          <article class="lesson-part">
+            <span class="lesson-part-tag tag-3">PARTE 3</span>
+            <h3>Campos de dados</h3>
+            <p>
+              O conteúdo em si: número do cartão, valor, moeda, terminal e código de resposta.
+              Nenhum deles tem nome nem separador na mensagem. Quem os identifica é só o bitmap,
+              lido na ordem crescente de número.
+            </p>
+          </article>
+        </div>
+
+        <div class="lesson-demo">
+          <h3 class="lesson-demo-title">Como isso aparece no hex</h3>
+          <pre class="lesson-art">0100                MTI: versão, classe, função, origem
+723C4480 00E08000   bitmap: quem existe
+16 41 11 ...        campos, em ordem crescente de DE</pre>
+          <p>
+            O decodificador não adivinha nada. Ele lê 2 bytes de MTI, 8 bytes de bitmap, e passa a
+            saber exatamente quais campos vêm a seguir. É por isso que um único tamanho errado
+            estraga a mensagem inteira.
+          </p>
+          <pre class="lesson-art">primeiro byte:  0x72  =  0111 0010
+bit:            1 2 3 4 5 6 7 8
+ligado:         0 1 1 1 0 0 1 0
+campo:          - 2 3 4 - - 7 -</pre>
+          <p>
+            Lendo o bitmap inteiro de uma compra no débito, <code>72 3C 44 80 00 E0 80 00</code>,
+            saem os campos 2, 3, 4, 7, 11, 12, 13, 14, 18, 22, 25, 41, 42, 43 e 49.
+          </p>
+        </div>
+
+        <div class="lesson-demo">
+          <h3 class="lesson-demo-title">Tamanho fixo, LVAR e LLLVAR</h3>
+          <p>
+            Campo de tamanho fixo tem o tamanho na especificação, sempre igual. Campo variável leva
+            o tamanho na frente, para o leitor saber onde termina.
+          </p>
+          <pre class="lesson-art">DE 2   LLVAR   16 4111111111111111   tamanho 16, depois 8 bytes em decimal empacotado
+DE 55  LLLVAR  0048 9F26...          48 bytes, prefixo em 2 bytes
+DE 22  FIXO    0051                 3 dígitos, com zero de preenchimento</pre>
+          <p>
+            O prefixo do LLVAR ocupa 2 dígitos. O do LLLVAR são 3 dígitos, e 3 dígitos não cabem em
+            um byte quando o número vai em decimal empacotado: ocupam 2 bytes, com zero à esquerda. Por isso um
+            DE 55 de 48 bytes começa com <code>0048</code>, e não com <code>48</code>.
+          </p>
+          <p class="lesson-warn">
+            Detalhe que engana: campo numérico com quantidade ímpar de dígitos ganha meio byte de
+            zero à esquerda. O DE 22 igual a <code>051</code> aparece como <code>0051</code> no hex,
+            e isso não é erro, é preenchimento.
+          </p>
+        </div>
+
+        <p class="lesson-glossary">
+          <strong>Decimal empacotado, também chamado de BCD:</strong> cada byte guarda dois dígitos,
+          um em cada metade. É por isso que um PAN de 16 dígitos ocupa 8 bytes, e não 16.
+        </p>
+      </div>
+    </details>
+  </section>
+
+  <section class="input-card card">
+    <div class="input-card-head">
+      <div>
+        <div class="section-kicker">01 / ENTRADA</div>
+        <h2>Mensagem hexadecimal</h2>
+      </div>
+    </div>
+
+    @if (selectedPreset) {
+      <div class="scenario-note"><span class="note-icon">✳</span><span>{{ selectedPreset.scenario }}</span></div>
+    }
+
+    <div class="message-editor">
+      <div class="hex-input-column">
+        <div class="textarea-wrap">
+          <textarea
+            aria-label="Mensagem ISO 8583 em hexadecimal"
+            placeholder="Cole a mensagem ISO 8583 em hexadecimal…&#10;Ex.: 0100F23C46D128E080…"
+            [(ngModel)]="hexInput"
+            (ngModelChange)="parseInput()"
+            spellcheck="false"
+            autocapitalize="characters"></textarea>
+          <div class="input-actions">
+            @if (hexInput) {
+              <button type="button" class="icon-button" (click)="copyText(hexInput, 'Hex copiado')" title="Copiar hex" aria-label="Copiar hex">⧉</button>
+              @if (result) {
+                <button type="button" class="icon-button" (click)="copyDescription()" title="Copiar descrição" aria-label="Copiar como texto">≡</button>
+                <button type="button" class="icon-button" (click)="downloadJson()" title="Baixar JSON" aria-label="Baixar JSON">↓</button>
+              }
+              <button type="button" class="icon-button" (click)="shareMessage()" title="Copiar link compartilhável" aria-label="Copiar link">↗</button>
+              <button type="button" class="icon-button clear-button" (click)="clearInput()" title="Limpar" aria-label="Limpar">×</button>
+            }
+          </div>
+        </div>
+      </div>
+
+      <aside class="preset-panel" aria-label="Exemplos de mensagens ISO 8583">
+        <div class="preset-panel-heading">
+          <strong>Exemplos</strong>
+          <span>Carregue uma mensagem</span>
+        </div>
+        <div class="preset-buttons">
+          @for (preset of presets; track preset.id) {
+            <button
+              type="button"
+              class="preset-button"
+              [class.selected]="selectedPreset?.id === preset.id"
+              [attr.aria-pressed]="selectedPreset?.id === preset.id"
+              (click)="loadPreset(preset.id)">
+              <span class="preset-button-name">{{ preset.name }}</span>
+              <span class="preset-button-mti">{{ preset.mti }}</span>
+            </button>
+          }
+        </div>
+      </aside>
+    </div>
+
+    <div class="input-footer">
+      <span>{{ hexInput ? (hexInput.replaceAll(' ', '').replaceAll('\n', '').length + ' caracteres hex · ' + inputBytes + ' bytes') : 'Os dados são analisados no seu navegador e não são enviados a um servidor.' }}</span>
+      @if (result) {
+        <span class="field-count">{{ result.fields.length }} campos encontrados</span>
+      }
+      @if (copiedNotice) {
+        <span class="copy-notice">{{ copiedNotice }}</span>
+      }
+    </div>
+
+    @if (result?.errors?.length) {
+      <div class="errors-list">
+        @for (error of result.errors; track $index) {
+          <div class="error-row" [class.warning]="error.message.includes('No spec') || error.message.includes('unparsed')">
+            <span>!</span>{{ displayError(error.message) }}
+          </div>
+        }
+      </div>
+    }
+  </section>
+
+  <nav class="tabs" aria-label="Seções do projeto">
+    <button type="button" [class.active]="activeTab === 'parse'" (click)="activeTab = 'parse'"><span>⌘</span> Análise</button>
+    <button type="button" [class.active]="activeTab === 'learn'" (click)="activeTab = 'learn'"><span>◉</span> Aprender <span class="tab-count">{{ scenarios.length }}</span></button>
+    <button type="button" [class.active]="activeTab === 'reference'" (click)="activeTab = 'reference'"><span>▤</span> Referência <span class="tab-count">128</span></button>
+  </nav>
+
+  @if (activeTab === 'parse') {
+    @if (!result) {
+      <section class="empty-state card">
+        <div class="empty-icon">⌁</div>
+        <h2>Sua próxima mensagem começa aqui</h2>
+        <p>Cole um hex acima ou escolha um exemplo para ver a análise em tempo real.</p>
+        <button type="button" class="button button-primary" (click)="loadPreset('auth-request')">Experimentar um exemplo <span>→</span></button>
+      </section>
+    } @else {
+      <section class="results-grid">
+        @if (result.mti; as mti) {
+          <article class="card mti-card">
+            <div class="card-heading">
+              <div><span class="section-kicker">IDENTIFICADOR DA MENSAGEM</span><h2>MTI <span class="mti-code">{{ mti.raw }}</span></h2></div>
+              <span class="status-chip" [class.status-good]="result.success"><i></i>{{ result.success ? 'Estrutura válida' : 'Verifique os avisos' }}</span>
+            </div>
+            <p class="mti-description">{{ mtiDescription() }}</p>
+            <div class="mti-parts">
+              <div><span>VERSÃO</span><b>{{ mti.version.code }}</b><small>{{ mtiPartLabel(mti.version.label) }}</small></div>
+              <div><span>CLASSE</span><b>{{ mti.messageClass.code }}</b><small>{{ mtiPartLabel(mti.messageClass.label) }}</small></div>
+              <div><span>FUNÇÃO</span><b>{{ mti.function.code }}</b><small>{{ mtiPartLabel(mti.function.label) }}</small></div>
+              <div><span>ORIGEM</span><b>{{ mti.origin.code }}</b><small>{{ mtiPartLabel(mti.origin.label) }}</small></div>
+            </div>
+          </article>
+        }
+
+        @if (result.hexSegments.length) {
+          <article class="card hex-card">
+            <div class="card-heading">
+              <div><span class="section-kicker">VISUALIZAÇÃO DA MENSAGEM</span><h2>Anotações do hexadecimal</h2></div>
+              <span class="subtle-label">Selecione um campo para destacar</span>
+            </div>
+            <div class="hex-annotator">
+              @for (segment of result.hexSegments; track $index) {
+                <button
+                  type="button"
+                  class="hex-segment"
+                  [class]="'hex-segment cat-' + segment.category"
+                  [class.highlighted]="segment.de !== undefined && highlightedDe === segment.de"
+                  [class.dimmed]="highlightedDe !== null && segment.de !== undefined && highlightedDe !== segment.de"
+                  [title]="displaySegmentLabel(segment.label)"
+                  (click)="segment.de !== undefined && toggleHighlight(segment.de)">
+                  {{ segment.hex }}
+                </button>
+              }
+            </div>
+            <div class="legend">
+              @for (category of ['mti', 'bitmap', 'identification', 'amount', 'processing', 'date_time', 'reference', 'network', 'terminal', 'security']; track category) {
+                <span><i [style.background]="categoryColor(category)"></i>{{ categoryLabel(category) }}</span>
+              }
+            </div>
+          </article>
+        }
+
+        @if (result.primaryBitmap; as bitmap) {
+          <article class="card bitmap-card">
+            <div class="card-heading">
+              <div><span class="section-kicker">MAPA DE CAMPOS / 01</span><h2>Mapa de bits primário</h2></div>
+              <span class="subtle-label mono">{{ bitmap.rawHex }}</span>
+            </div>
+            <p class="card-caption">{{ bitmap.activeFields.length }} campos ativos{{ bitmap.hasSecondary ? ' · inclui bitmap secundário' : '' }}</p>
+            <div class="bitmap-grid">
+              @for (cell of bitmapCells(bitmap, 0); track cell.field) {
+                <button type="button" class="bitmap-cell" [class.active]="cell.active" [class.selected]="highlightedDe === cell.field" [title]="'DE ' + cell.field + ' · ' + fieldName(cell.field)" [disabled]="!cell.active" (click)="toggleHighlight(cell.field)">{{ cell.field }}</button>
+              }
+            </div>
+          </article>
+        }
+
+        @if (result.secondaryBitmap; as bitmap) {
+          <article class="card bitmap-card">
+            <div class="card-heading">
+              <div><span class="section-kicker">MAPA DE CAMPOS / 02</span><h2>Mapa de bits secundário</h2></div>
+              <span class="subtle-label mono">{{ bitmap.rawHex }}</span>
+            </div>
+            <p class="card-caption">{{ bitmap.activeFields.length }} campos ativos · DE 65–128</p>
+            <div class="bitmap-grid">
+              @for (cell of bitmapCells(bitmap, 64); track cell.field) {
+                <button type="button" class="bitmap-cell" [class.active]="cell.active" [class.selected]="highlightedDe === cell.field" [title]="'DE ' + cell.field + ' · ' + fieldName(cell.field)" [disabled]="!cell.active" (click)="toggleHighlight(cell.field)">{{ cell.field }}</button>
+              }
+            </div>
+          </article>
+        }
+
+        @if (messageStats; as stats) {
+          <article class="card stats-card">
+            <div class="card-heading">
+              <div><span class="section-kicker">TAMANHO E COMPOSIÇÃO</span><h2>Anatomia da mensagem</h2></div>
+            </div>
+            <div class="stats-row">
+              <div><b>{{ stats.totalBytes }}</b><span>bytes totais</span></div>
+              <div><b>{{ result.fields.length }}</b><span>elementos</span></div>
+              <div><b>{{ stats.fixedCount }}:{{ stats.variableCount }}</b><span>fixos : variáveis</span></div>
+              <div><b>{{ stats.payloadPercent }}%</b><span>carga útil</span></div>
+            </div>
+            <div class="category-bars">
+              @for (category of stats.categories; track category.category) {
+                <div class="category-row">
+                  <span class="category-dot" [style.background]="categoryColor(category.category)"></span>
+                  <span class="category-name">{{ category.label }}</span>
+                  <div class="bar-track"><div class="bar-value" [style.width.%]="category.percent" [style.background]="categoryColor(category.category)"></div></div>
+                  <span class="bar-bytes">{{ category.bytes }} B</span>
+                </div>
+              }
+            </div>
+            @if (result.fields.length) {
+              <p class="largest-field">Payload de {{ stats.payloadBytes }} bytes · {{ stats.totalBytes - stats.payloadBytes }} bytes de MTI e bitmap</p>
+            }
+          </article>
+        }
+
+        @if (result.fields.length) {
+          <article class="card field-table-card">
+            <div class="card-heading">
+              <div><span class="section-kicker">DADOS DECODIFICADOS</span><h2>Elementos da mensagem <span class="inline-count">{{ result.fields.length }}</span></h2></div>
+              @if (binLoading) { <span class="subtle-label">Carregando base BIN…</span> }
+            </div>
+            @if (binError) { <p class="inline-warning">{{ binError }}</p> }
+            <div class="table-scroll">
+              <table class="data-table">
+                <thead><tr><th>DE</th><th>Campo</th><th>Valor interpretado</th><th>Formato</th><th>Categoria</th></tr></thead>
+                <tbody>
+                  @for (field of result.fields; track field.de) {
+                    <tr [class.selected-row]="highlightedDe === field.de" (mouseenter)="highlightedDe = field.de" (mouseleave)="highlightedDe = null" (click)="toggleHighlight(field.de)">
+                      <td><span class="de-badge">DE{{ field.de }}</span></td>
+                      <td><strong>{{ field.name }}</strong>@if (field.description) { <small>{{ field.description }}</small> }</td>
+                      <td class="value-cell">
+                        <code>{{ displayValue(field) }}</code>
+                        @if (field.de === 2) {
+                          <div class="pan-badges">
+                            <span class="mini-badge" [class.badge-success]="isLuhnValid(field.decodedValue)" [class.badge-danger]="!isLuhnValid(field.decodedValue)">Luhn {{ isLuhnValid(field.decodedValue) ? 'válido' : 'inválido' }}</span>
+                            @if (panInfo; as info) {
+                              <span class="mini-badge">{{ binBrandLabel(info.brand) }} · {{ binTypeLabel(info.type) }}</span>
+                            }
+                          </div>
+                          @if (panInfo; as info) {
+                            <small class="bin-details">BIN {{ field.decodedValue.slice(0, 6) }} · {{ info.issuer }} · {{ info.country }} · {{ binCategoryLabel(info.category) }}</small>
+                          }
+                        }
+                        @if (field.de === 55 && field.tlv?.length) {
+                          <div class="tlv-chips">
+                            @for (item of field.tlv; track item.tag) {
+                              <span class="tlv-chip" [title]="item.valueHex">{{ item.tag }} · {{ item.name }}</span>
+                            }
+                          </div>
+                        }
+                        <small class="raw-hex">HEX {{ field.rawHex }}</small>
+                      </td>
+                      <td><code class="format-cell">{{ field.format }} <span>({{ field.type }})</span></code></td>
+                      <td><span class="category-pill" [style.--category-color]="categoryColor(field.category)">{{ categoryLabel(field.category) }}</span></td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          </article>
+        }
+      </section>
+    }
+  }
+
+  @if (activeTab === 'learn') {
+    <section class="learn-section">
+      <div class="section-intro">
+        <span class="section-kicker">GUIA INTERATIVO</span>
+        <h2>Pagamentos, passo a passo.</h2>
+        <p>Escolha uma situação para carregar e explorar uma mensagem real em hexadecimal.</p>
+      </div>
+      <div class="scenario-grid">
+        @for (scenario of scenarios; track scenario.id) {
+          <article class="scenario-card card">
+            <div class="scenario-icon">{{ scenario.icon }}</div>
+            <h3>{{ scenario.title }}</h3>
+            <p>{{ scenario.description }}</p>
+            <ol>
+              @for (step of scenario.steps; track $index) { <li>{{ step }}</li> }
+            </ol>
+            <button type="button" class="text-button" (click)="loadScenario(scenario.presetId)">Explorar mensagem <span>→</span></button>
+          </article>
+        }
+      </div>
+    </section>
+  }
+
+  @if (activeTab === 'reference') {
+    <section class="reference-section">
+      <article class="card reference-card">
+        <div class="section-intro compact">
+          <span class="section-kicker">ISO 8583:1987</span>
+          <h2>Referência de campos</h2>
+          <p>Consulte formato, tamanho e descrição dos 128 elementos de dados.</p>
+        </div>
+        <label class="search-box"><span>⌕</span><input type="search" [(ngModel)]="fieldSearch" placeholder="Buscar por nome, DE ou formato…" aria-label="Buscar campo"></label>
+        <div class="table-scroll reference-scroll">
+          <table class="data-table">
+            <thead><tr><th>DE</th><th>Nome</th><th>Tamanho máx.</th><th>Formato</th><th>Tipo</th><th>Categoria</th></tr></thead>
+            <tbody>
+              @for (item of filteredFields; track item.de) {
+                <tr>
+                  <td><span class="de-badge">DE{{ item.de }}</span></td>
+                  <td><strong>{{ item.spec.name }}</strong>@if (item.spec.description) { <small>{{ item.spec.description }}</small> }</td>
+                  <td class="mono">{{ item.spec.maxLength }}</td>
+                  <td><span class="format-badge">{{ item.spec.format }}</span></td>
+                  <td><code>{{ item.spec.type }}</code></td>
+                  <td><span class="category-pill" [style.--category-color]="categoryColor(item.spec.category)">{{ categoryLabel(item.spec.category) }}</span></td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <p class="table-footnote">{{ filteredFields.length }} de 128 campos</p>
+      </article>
+
+      <article class="card reference-card response-reference">
+        <div class="section-intro compact">
+          <span class="section-kicker">CÓDIGOS DE RESPOSTA</span>
+          <h2>O que respondeu o emissor?</h2>
+          <p>Descrições comuns do DE39 para identificar aprovações e recusas.</p>
+        </div>
+        <label class="search-box"><span>⌕</span><input type="search" [(ngModel)]="responseSearch" placeholder="Buscar código ou descrição…" aria-label="Buscar código de resposta"></label>
+        <div class="response-grid">
+          @for (item of filteredResponseCodes; track item.code) {
+            <div class="response-row">
+              <code>{{ item.code }}</code><span>{{ item.text }}</span>
+              <span class="response-status" [class]="'response-status ' + responseSeverity(item.severity)">{{ item.severity === 'success' ? 'OK' : item.severity === 'warning' ? 'ATENÇÃO' : 'RECUSA' }}</span>
+            </div>
+          }
+        </div>
+        <p class="table-footnote">{{ filteredResponseCodes.length }} códigos</p>
+      </article>
+    </section>
+  }
+
+  <footer class="footer">
+    <span><b>ISO tools</b> · Um espaço para entender mensagens de pagamento.</span>
+    <span>Dados processados localmente no seu navegador.</span>
+  </footer>
+</main>
